@@ -14,15 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
+      tag_name: ${{ steps.get_tag.outputs.tag }}
     steps:
+      - name: Get tag
+        id: get_tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ steps.get_tag.outputs.tag }}
+          release_name: Release ${{ steps.get_tag.outputs.tag }}
           draft: false
           prerelease: false
 
@@ -50,9 +55,6 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
       
-      - name: Build App Bundle
-        run: flutter build appbundle --release
-      
       - name: Upload APK
         uses: actions/upload-release-asset@v1
         env:
@@ -60,24 +62,17 @@ jobs:
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
           asset_path: build/app/outputs/flutter-apk/app-release.apk
-          asset_name: app-release.apk
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-android.apk
           asset_content_type: application/vnd.android.package-archive
-      
-      - name: Upload App Bundle
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: build/app/outputs/bundle/release/app-release.aab
-          asset_name: app-release.aab
-          asset_content_type: application/octet-stream
 
   build-windows:
     needs: create-release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
+      
+      - name: Setup Visual Studio
+        uses: microsoft/setup-msbuild@v1.1
       
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -94,21 +89,17 @@ jobs:
       - name: Build
         run: flutter build windows --release
       
-      - name: Archive Release
-        uses: thedoctor0/zip-release@master
-        with:
-          type: 'zip'
-          filename: 'windows-release.zip'
-          directory: build/windows/x64/runner/Release
-      
+      - name: Create ZIP archive
+        run: Compress-Archive -Path build/windows/x64/Release/* -DestinationPath windows-release.zip
+        
       - name: Upload Release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: build/windows/x64/runner/Release/windows-release.zip
-          asset_name: windows-release.zip
+          asset_path: windows-release.zip
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-windows.zip
           asset_content_type: application/zip
 
   build-linux:
@@ -120,7 +111,8 @@ jobs:
       - name: Install Flutter dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgtk-3-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev libblkid-dev cmake libsecret-1-dev libolm3 libwebkit2gtk-4.0-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb libxkbcommon-dev pkg-config
       
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -137,12 +129,10 @@ jobs:
       - name: Build
         run: flutter build linux --release
       
-      - name: Archive Release
-        uses: thedoctor0/zip-release@master
-        with:
-          type: 'zip'
-          filename: 'linux-release.zip'
-          directory: build/linux/x64/release/bundle
+      - name: Create ZIP archive
+        run: |
+          cd build/linux/x64/release/bundle
+          zip -r ../../../../../linux-release.zip *
       
       - name: Upload Release
         uses: actions/upload-release-asset@v1
@@ -150,11 +140,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: build/linux/x64/release/bundle/linux-release.zip
-          asset_name: linux-release.zip
+          asset_path: linux-release.zip
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-linux.zip
           asset_content_type: application/zip
 
-  build-macos-ios:
+  build-macos:
     needs: create-release
     runs-on: macos-latest
     steps:
@@ -175,10 +165,10 @@ jobs:
       - name: Build macOS
         run: flutter build macos --release
       
-      - name: Archive macOS Release
+      - name: Create ZIP archive
         run: |
           cd build/macos/Build/Products/Release
-          zip -r macos-release.zip hello_flutter.app
+          zip -r ../../../../../macos-release.zip *.app
       
       - name: Upload macOS Release
         uses: actions/upload-release-asset@v1
@@ -186,24 +176,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: build/macos/Build/Products/Release/macos-release.zip
-          asset_name: macos-release.zip
-          asset_content_type: application/zip
-      
-      - name: Build iOS
-        run: flutter build ios --release --no-codesign
-      
-      - name: Archive iOS Release
-        run: |
-          cd build/ios/iphoneos
-          zip -r ios-release.zip Runner.app
-      
-      - name: Upload iOS Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: build/ios/iphoneos/ios-release.zip
-          asset_name: ios-release.zip
+          asset_path: macos-release.zip
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-macos.zip
           asset_content_type: application/zip

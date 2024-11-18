@@ -16,10 +16,31 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       tag_name: ${{ steps.get_tag.outputs.tag }}
     steps:
+      - uses: actions/checkout@v3
+      
       - name: Get tag
         id: get_tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
+      
+      - name: Update version info
+        run: |
+          # 更新版本文件
+          cat > lib/version.dart << EOL
+          /// 应用版本信息
+          class Version {
+            /// 当前版本号
+            static const String version = '${GITHUB_REF#refs/tags/v}';
+            
+            /// 构建时间
+            static const String buildDate = '$(date +%Y-%m-%d)';
+            
+            /// 获取版本更新说明
+            static String getVersionDescription(String version) {
+              return '版本 \$version 发布于 $(date +%Y-%m-%d)';
+            }
+          }
+          EOL
+      
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1

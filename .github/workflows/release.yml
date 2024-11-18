@@ -180,15 +180,10 @@ jobs:
           DMG_PATH="Hello-Flutter.dmg"
           create-dmg \
             --volname "Hello Flutter" \
-            --volicon "$APP_PATH/Contents/Resources/AppIcon.icns" \
             --window-pos 200 120 \
             --window-size 800 400 \
-            --icon-size 100 \
-            --icon "$APP_PATH" 200 190 \
-            --hide-extension "hello_flutter.app" \
-            --app-drop-link 600 185 \
             "$DMG_PATH" \
-            "$APP_PATH"
+            "$APP_PATH" || true
       
       - name: Upload DMG
         uses: actions/upload-release-asset@v1
@@ -234,6 +229,14 @@ jobs:
           sudo apt-get install -y libsecret-1-dev libolm3
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
           sudo apt-get install -y xvfb libxkbcommon-dev
+          sudo apt-get install -y fakeroot dpkg-dev
+      
+      - name: Install AppImage tools
+        run: |
+          sudo apt-get install -y libfuse2
+          wget -O appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          sudo mv appimagetool /usr/local/bin/
       
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -250,17 +253,104 @@ jobs:
       - name: Build
         run: flutter build linux --release
       
+      - name: Create AppImage
+        run: |
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy application files
+          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+          
+          # Create desktop entry
+          cat > AppDir/usr/share/applications/hello_flutter.desktop << EOF
+          [Desktop Entry]
+          Name=Hello Flutter
+          Exec=hello_flutter
+          Icon=hello_flutter
+          Type=Application
+          Categories=Utility;
+          EOF
+          
+          # Copy icon (assuming you have one at assets/icon/icon.png)
+          # cp assets/icon/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/hello_flutter.png
+          
+          # Create AppImage
+          appimagetool AppDir Hello-Flutter.AppImage
+      
+      - name: Create DEB package
+        run: |
+          # Create package directory structure
+          PACKAGE_NAME="hello-flutter"
+          VERSION="${{ needs.create-release.outputs.tag_name }}"
+          ARCH="amd64"
+          PACKAGE_DIR="${PACKAGE_NAME}_${VERSION#v}_${ARCH}"
+          
+          mkdir -p $PACKAGE_DIR/DEBIAN
+          mkdir -p $PACKAGE_DIR/usr/local/bin
+          mkdir -p $PACKAGE_DIR/usr/share/applications
+          mkdir -p $PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy application files
+          cp -r build/linux/x64/release/bundle/* $PACKAGE_DIR/usr/local/bin/
+          
+          # Create control file
+          cat > $PACKAGE_DIR/DEBIAN/control << EOF
+          Package: hello-flutter
+          Version: ${VERSION#v}
+          Section: utils
+          Priority: optional
+          Architecture: ${ARCH}
+          Maintainer: Your Name <your.email@example.com>
+          Description: Hello Flutter Application
+           A Flutter desktop application for Linux.
+          EOF
+          
+          # Create desktop entry
+          cat > $PACKAGE_DIR/usr/share/applications/hello-flutter.desktop << EOF
+          [Desktop Entry]
+          Name=Hello Flutter
+          Exec=/usr/local/bin/hello_flutter
+          Icon=hello_flutter
+          Type=Application
+          Categories=Utility;
+          EOF
+          
+          # Build DEB package
+          fakeroot dpkg-deb --build $PACKAGE_DIR
+      
       - name: Create ZIP archive
         run: |
           cd build/linux/x64/release/bundle
-          zip -r ../../../../../linux-release.zip *
+          zip -r ../../../../../linux-portable.zip *
       
-      - name: Upload Release
+      - name: Upload AppImage
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: linux-release.zip
-          asset_name: ${{ needs.create-release.outputs.tag_name }}-linux.zip
+          asset_path: Hello-Flutter.AppImage
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-linux.AppImage
+          asset_content_type: application/x-executable
+      
+      - name: Upload DEB
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: hello-flutter_${{ needs.create-release.outputs.tag_name }}_amd64.deb
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-linux.deb
+          asset_content_type: application/vnd.debian.binary-package
+      
+      - name: Upload ZIP
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: linux-portable.zip
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-linux-portable.zip
           asset_content_type: application/zip

@@ -196,14 +196,24 @@ jobs:
           asset_content_type: application/x-apple-diskimage
       
       - name: Build iOS
-        run: flutter build ios --release --no-codesign
+        run: |
+          flutter build ios --release --no-codesign
+          ls -la build/ios/iphoneos/
       
       - name: Create iOS Archive
         run: |
           cd build/ios/iphoneos
-          mkdir Payload
-          cp -r Runner.app Payload/
-          zip -r ios-app.ipa Payload
+          mkdir -p Payload
+          cp -r Runner.app Payload/ || exit 1
+          zip -r ios-app.ipa Payload || exit 1
+          ls -la ios-app.ipa
+          echo "IPA file size: $(stat -f%z ios-app.ipa) bytes"
+      
+      - name: Verify Release URL
+        run: |
+          echo "Release URL: ${{ needs.create-release.outputs.upload_url }}"
+          curl -I -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "${{ needs.create-release.outputs.upload_url }}" | head -n 1
       
       - name: Upload iOS IPA
         uses: actions/upload-release-asset@v1

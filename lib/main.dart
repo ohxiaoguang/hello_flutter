@@ -2,6 +2,9 @@ import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'version.dart';
+import 'services/update_service.dart';
+import 'widgets/update_dialog.dart';
+import 'pages/settings_page.dart';
 
 void main() {
   runApp(MyApp());
@@ -28,7 +31,6 @@ class MyApp extends StatelessWidget {
 
 class MyAppState extends ChangeNotifier {
   var current = WordPair.random();
-  // ↓ Add this.
   void getNext() {
     current = WordPair.random();
     notifyListeners();
@@ -55,6 +57,41 @@ class _MyHomePageState extends State<MyHomePage> {
   var selectedIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _checkUpdate();
+  }
+
+  Future<void> _checkUpdate({bool showNoUpdate = false}) async {
+    try {
+      final updateInfo = await UpdateService.checkUpdate();
+      if (updateInfo != null && mounted) {
+        // 显示更新对话框
+        showDialog(
+          context: context,
+          builder: (context) => UpdateDialog(updateInfo: updateInfo),
+        );
+      } else if (showNoUpdate && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已是最新版本'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('检查更新失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     Widget page;
     switch (selectedIndex) {
@@ -64,26 +101,33 @@ class _MyHomePageState extends State<MyHomePage> {
       case 1:
         page = FavoritesPage();
         break;
+      case 2:
+        page = const SettingsPage();
+        break;
       default:
         throw UnimplementedError('no widget for $selectedIndex');
     }
 
     return LayoutBuilder(
-      builder: (context,constraints) {
+      builder: (context, constraints) {
         return Scaffold(
           body: Row(
             children: [
               SafeArea(
                 child: NavigationRail(
                   extended: constraints.maxWidth >= 600,
-                  destinations: [
+                  destinations: const [
                     NavigationRailDestination(
                       icon: Icon(Icons.home),
-                      label: Text('Home'),
+                      label: Text('首页'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.favorite),
-                      label: Text('Favorites'),
+                      label: Text('收藏'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings),
+                      label: Text('设置'),
                     ),
                   ],
                   selectedIndex: selectedIndex,
@@ -91,7 +135,6 @@ class _MyHomePageState extends State<MyHomePage> {
                     setState(() {
                       selectedIndex = value;
                     });
-                    print('selected: $value');
                   },
                 ),
               ),
@@ -104,7 +147,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ],
           ),
         );
-      }
+      },
     );
   }
 }
@@ -163,21 +206,24 @@ class BigCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);       // ← Add this.
-    // ↓ Add this.
+    final theme = Theme.of(context);
     final style = theme.textTheme.displayMedium!.copyWith(
       color: theme.colorScheme.onPrimary,
     );
+
     return Card(
-      color: theme.colorScheme.primary,    // ← And also this.
+      color: theme.colorScheme.primary,
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Text(pair.asLowerCase,style: style,semanticsLabel: "${pair.first} ${pair.second}"),
+        child: Text(
+          pair.asLowerCase,
+          style: style,
+          semanticsLabel: "${pair.first} ${pair.second}",
+        ),
       ),
     );
   }
 }
-
 
 class FavoritesPage extends StatelessWidget {
   @override

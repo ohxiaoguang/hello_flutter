@@ -256,28 +256,38 @@ jobs:
       - name: Create AppImage
         run: |
           # Create AppDir structure
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/{bin,share/{applications,icons/hicolor/256x256/apps}}
           
           # Copy application files
           cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
           
-          # Create desktop entry
-          cat > AppDir/usr/share/applications/hello_flutter.desktop << EOF
+          # Create desktop entry in the correct location
+          cat > AppDir/hello_flutter.desktop << EOF
           [Desktop Entry]
           Name=Hello Flutter
-          Exec=hello_flutter
+          Exec=usr/bin/hello_flutter
           Icon=hello_flutter
           Type=Application
           Categories=Utility;
           EOF
           
-          # Copy icon (assuming you have one at assets/icon/icon.png)
-          # cp assets/icon/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/hello_flutter.png
+          # Create a dummy icon if not exists
+          convert -size 256x256 xc:transparent AppDir/hello_flutter.png
+          
+          # Create AppRun script
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/hello_flutter" "$@"
+          EOF
+          
+          chmod +x AppDir/AppRun
           
           # Create AppImage
-          appimagetool AppDir Hello-Flutter.AppImage
+          ARCH=x86_64 appimagetool AppDir Hello-Flutter.AppImage
       
       - name: Create DEB package
         run: |

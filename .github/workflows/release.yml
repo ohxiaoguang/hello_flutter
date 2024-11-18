@@ -89,6 +89,48 @@ jobs:
       - name: Build
         run: flutter build windows --release
       
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+      
+      - name: Create Installer
+        shell: pwsh
+        run: |
+          $buildPath = "build\windows\x64\Runner\Release"
+          $appName = "Hello Flutter"
+          $version = "${{ needs.create-release.outputs.tag_name }}"
+          
+          # Create Inno Setup script
+          @"
+          [Setup]
+          AppName=$appName
+          AppVersion=$version
+          DefaultDirName={pf}\$appName
+          DefaultGroupName=$appName
+          OutputDir=.
+          OutputBaseFilename=$appName-Setup
+          
+          [Files]
+          Source: "$buildPath\*"; DestDir: "{app}"; Flags: recursesubdirs
+          
+          [Icons]
+          Name: "{group}\$appName"; Filename: "{app}\hello_flutter.exe"
+          Name: "{commondesktop}\$appName"; Filename: "{app}\hello_flutter.exe"
+          "@ | Out-File -FilePath "installer.iss" -Encoding UTF8
+          
+          # Run Inno Setup Compiler
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer.iss
+      
+      - name: Upload Installer
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: Hello Flutter-Setup.exe
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-windows-setup.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
+      
       - name: Create ZIP archive
         shell: pwsh
         run: |
@@ -100,15 +142,80 @@ jobs:
             exit 1
           }
       
-      - name: Upload Release
+      - name: Upload ZIP
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
           asset_path: windows-release.zip
-          asset_name: ${{ needs.create-release.outputs.tag_name }}-windows.zip
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-windows-portable.zip
           asset_content_type: application/zip
+
+  build-macos-ios:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.4'
+          channel: 'stable'
+      
+      - name: Install dependencies
+        run: flutter pub get
+      
+      - name: Enable macOS build
+        run: flutter config --enable-macos-desktop
+      
+      - name: Build macOS
+        run: flutter build macos --release
+      
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "Hello Flutter" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "build/macos/Build/Products/Release/hello_flutter.app" 200 190 \
+            --hide-extension "hello_flutter.app" \
+            --app-drop-link 600 185 \
+            "Hello Flutter.dmg" \
+            "build/macos/Build/Products/Release/hello_flutter.app"
+      
+      - name: Upload DMG
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: Hello Flutter.dmg
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-macos.dmg
+          asset_content_type: application/x-apple-diskimage
+      
+      - name: Build iOS
+        run: flutter build ios --release --no-codesign
+      
+      - name: Create iOS Archive
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -r Runner.app Payload/
+          zip -r ios-app.ipa Payload
+      
+      - name: Upload iOS IPA
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: build/ios/iphoneos/ios-app.ipa
+          asset_name: ${{ needs.create-release.outputs.tag_name }}-ios-unsigned.ipa
+          asset_content_type: application/octet-stream
 
   build-linux:
     needs: create-release
@@ -153,40 +260,4 @@ jobs:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
           asset_path: linux-release.zip
           asset_name: ${{ needs.create-release.outputs.tag_name }}-linux.zip
-          asset_content_type: application/zip
-
-  build-macos:
-    needs: create-release
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.4'
-          channel: 'stable'
-      
-      - name: Install dependencies
-        run: flutter pub get
-      
-      - name: Enable macOS build
-        run: flutter config --enable-macos-desktop
-      
-      - name: Build macOS
-        run: flutter build macos --release
-      
-      - name: Create ZIP archive
-        run: |
-          cd build/macos/Build/Products/Release
-          zip -r ../../../../../macos-release.zip *.app
-      
-      - name: Upload macOS Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: macos-release.zip
-          asset_name: ${{ needs.create-release.outputs.tag_name }}-macos.zip
           asset_content_type: application/zip

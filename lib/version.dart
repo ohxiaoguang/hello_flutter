@@ -1,13 +1,19 @@
 /// 应用版本信息
 class Version {
   /// 当前版本号
-  static const String version = '0.1.10';
+  static const String version = '0.2.1';
   
   /// 构建时间
   static const String buildDate = '2024-11-18';
   
   /// 版本历史
-  static const List<Map<String, String>> history = [
+  static final List<Map<String, String>> history = [
+    {
+      'version': 'v0.2.1',
+      'date': '2024-11-18',
+      'description': '优化界面和交互体验',
+      'platforms': 'macOS, Windows, Linux, iOS',
+    },
     {
       'version': 'v0.1.10',
       'date': '2024-11-18',

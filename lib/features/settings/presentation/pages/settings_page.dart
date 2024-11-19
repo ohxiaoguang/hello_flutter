@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../version.dart';
-import '../services/update_service.dart';
-import '../widgets/update_dialog.dart';
+import 'package:provider/provider.dart';
+import '../../../../core/providers/settings_state.dart';
+import '../../../update/services/update_service.dart';
+import '../../../update/presentation/widgets/update_dialog.dart';
+import '../../../../version.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -13,28 +15,37 @@ class SettingsPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '设置',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 32),
+          Text('设置', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 20),
+          
+          // 版本信息
           Card(
             child: ListTile(
-              leading: const Icon(Icons.info_outline),
               title: const Text('当前版本'),
-              subtitle: Text('v${Version.version} (${Version.buildDate})'),
-              trailing: TextButton.icon(
-                icon: const Icon(Icons.system_update),
-                label: const Text('检查更新'),
+              subtitle: Text(Version.version),
+              trailing: TextButton(
                 onPressed: () => _checkUpdate(context),
+                child: const Text('检查更新'),
               ),
             ),
           ),
           const SizedBox(height: 16),
-          // 这里可以添加更多设置项
+          
+          // 自动更新设置
+          Card(
+            child: Consumer<SettingsState>(
+              builder: (context, settings, child) {
+                return SwitchListTile(
+                  title: const Text('自动检查更新'),
+                  subtitle: const Text('启动时自动检查新版本'),
+                  value: settings.autoUpdate,
+                  onChanged: (bool value) {
+                    settings.setAutoUpdate(value);
+                  },
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

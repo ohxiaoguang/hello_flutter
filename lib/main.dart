@@ -1,10 +1,14 @@
-import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:english_words/english_words.dart';
+import 'core/providers/app_state.dart';
+import 'core/providers/settings_state.dart';
+import 'core/theme/app_theme.dart';
+import 'features/home/presentation/pages/home_page.dart';
+import 'features/settings/presentation/pages/settings_page.dart';
+import 'features/update/services/update_service.dart';
+import 'features/update/presentation/widgets/update_dialog.dart';
 import 'version.dart';
-import 'services/update_service.dart';
-import 'widgets/update_dialog.dart';
-import 'pages/settings_page.dart';
 
 void main() {
   runApp(MyApp());
@@ -15,35 +19,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => MyAppState()),
+        ChangeNotifierProvider(create: (context) => SettingsState()),
+      ],
       child: MaterialApp(
         title: 'Namer App v${Version.version}',
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
-        ),
+        theme: AppTheme.theme,
         home: MyHomePage(),
       ),
     );
-  }
-}
-
-class MyAppState extends ChangeNotifier {
-  var current = WordPair.random();
-  void getNext() {
-    current = WordPair.random();
-    notifyListeners();
-  }
-
-  var favorites = <WordPair>[];
-  void toggleFavorite() {
-    if (favorites.contains(current)) {
-      favorites.remove(current);
-    } else {
-      favorites.add(current);
-    }
-    notifyListeners();
   }
 }
 
@@ -59,7 +45,10 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    _checkUpdate();
+    final settings = context.read<SettingsState>();
+    if (settings.autoUpdate) {
+      _checkUpdate();
+    }
   }
 
   Future<void> _checkUpdate({bool showNoUpdate = false}) async {
@@ -93,6 +82,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // 获取屏幕尺寸
+    final size = MediaQuery.of(context).size;
+    final isSmallScreen = size.width < 600;
+
     Widget page;
     switch (selectedIndex) {
       case 0:
@@ -108,46 +101,56 @@ class _MyHomePageState extends State<MyHomePage> {
         throw UnimplementedError('no widget for $selectedIndex');
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Scaffold(
-          body: Row(
-            children: [
-              SafeArea(
-                child: NavigationRail(
-                  extended: constraints.maxWidth >= 600,
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home),
-                      label: Text('首页'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.favorite),
-                      label: Text('收藏'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.settings),
-                      label: Text('设置'),
-                    ),
-                  ],
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) {
-                    setState(() {
-                      selectedIndex = value;
-                    });
-                  },
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  color: Theme.of(context).colorScheme.primaryContainer,
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('Namer App'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.system_update),
+            onPressed: _checkUpdate,
+            tooltip: '检查更新',
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: Row(
+              children: [
+                if (!isSmallScreen)
+                  NavigationRail(
+                    extended: true,
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.home),
+                        label: Text('首页'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.favorite),
+                        label: Text('收藏'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.settings),
+                        label: Text('设置'),
+                      ),
+                    ],
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: (value) {
+                      setState(() {
+                        selectedIndex = value;
+                      });
+                    },
+                  ),
+                Expanded(
                   child: page,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
